@@ -1,0 +1,24 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Secrets — never commit real credentials
+.streamlit/secrets.toml
+*service_account*.json
+*.json.key
+gen-lang-client-*.json
+
+# Local result backups (redundant, never the sole store — see storage.py)
+results_backup.csv
+
+# Stray local duplicates, not part of the repo
+images copy/
+images_full/
+
