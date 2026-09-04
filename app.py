@@ -117,17 +117,10 @@ extremes:
 - **0.0** — pure Atlantic **fario** (brown trout)
 - **1.0** — pure marble trout **marmorata**
 
-Please use the whole scale — including the middle, if that's genuinely
+Please use the whole scale including the middle, if that's genuinely
 your judgement. If a photo doesn't let you tell, check **"Unsure / can't
 tell"** instead of guessing.
-
-Your responses are recorded (including how long you spend on each photo)
-and used as a scientific baseline for a machine-learning model. There are
-no right answers we're checking you against — we want your honest,
-independent estimate.
-
-*(Reference / calibration images, if provided, would go here.)*
-        """
+"""
     )
     if st.button("I agree, begin", type="primary"):
         st.session_state.stage = "identify"
