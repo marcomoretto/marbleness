@@ -53,7 +53,7 @@ def fetch_results() -> pd.DataFrame:
     records = sheet.sheet1.get_all_records()
     df = pd.DataFrame(records)
     if df.empty:
-        raise RuntimeError("Results sheet is empty — nothing to analyze yet.")
+        raise RuntimeError("Results sheet is empty, nothing to analyze yet.")
 
     df["repeat_index"] = pd.to_numeric(df["repeat_index"], errors="coerce").fillna(0).astype(int)
     df["score"] = pd.to_numeric(df["score"], errors="coerce")  # blank -> NaN
@@ -67,7 +67,7 @@ def icc_2_1(matrix: pd.DataFrame) -> float:
     """ICC(2,1): two-way random effects, single rater, absolute agreement.
 
     matrix: rows = targets (images), columns = raters (curators), no
-    missing values (complete cases only — see caller).
+    missing values (complete cases only, see caller).
     """
     data = matrix.to_numpy(dtype=float)
     n, k = data.shape  # n targets, k raters
@@ -236,7 +236,7 @@ def main():
 
     report = "\n".join(
         [
-            "# marbleness — results analysis",
+            "# marbleness, results analysis",
             f"\nTotal rows in sheet: {len(df)}\n",
             analyze_reliability(df),
             analyze_bias(df),

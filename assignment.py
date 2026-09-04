@@ -1,9 +1,11 @@
-"""Deterministic per-curator queue construction.
+"""Deterministic per-session queue construction.
 
-Pure function, no I/O beyond listing `images/`. Every curator sees the SAME
+Pure function, no I/O beyond listing `images/`. Every session sees the SAME
 60 images (all-overlap design) but in a different, reproducible order, with
 a handful of hidden repeats inserted at random positions to measure
-intra-rater consistency.
+intra-rater consistency. Seeded by session_id (not curator_id) so that a
+curator's second attempt, a new session, gets a fresh order rather than
+replaying their first attempt's exact sequence.
 """
 
 import hashlib
@@ -15,14 +17,14 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg"}
 N_REPEATS_DEFAULT = 4
 
 
-def _stable_seed(curator_id: str) -> int:
-    """Stable hash of curator_id -> int seed.
+def _stable_seed(session_id: str) -> int:
+    """Stable hash of session_id -> int seed.
 
     Builtin hash() is randomized per-process (PYTHONHASHSEED) for strings,
     so it would NOT be reproducible across app restarts. Use sha256 instead
-    so "seeded by hash(curator_id)" actually holds across sessions.
+    so a resumed session always rebuilds the identical queue.
     """
-    digest = hashlib.sha256(curator_id.encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(session_id.encode("utf-8")).hexdigest()
     return int(digest[:16], 16)
 
 
@@ -37,21 +39,21 @@ def list_image_ids(image_dir: str | Path) -> list[str]:
 
 
 def build_queue(
-    curator_id: str,
+    session_id: str,
     image_dir: str | Path,
     n_repeats: int = N_REPEATS_DEFAULT,
 ) -> list[dict]:
-    """Build ordered queue for one curator.
+    """Build ordered queue for one session.
 
     Returns list of dicts: {image_id, repeat_index, queue_position}.
     - Every image_id from image_dir appears once with repeat_index=0.
     - n_repeats distinct image_ids (chosen without replacement) appear a
       second time with repeat_index=1, inserted at random positions.
     - Order (both the base shuffle and repeat insertion points) is
-      deterministic per curator_id, reproducible across runs.
+      deterministic per session_id, reproducible across runs/resumes.
     """
     image_ids = list_image_ids(image_dir)
-    rng = random.Random(_stable_seed(curator_id))
+    rng = random.Random(_stable_seed(session_id))
 
     base_order = image_ids[:]
     rng.shuffle(base_order)

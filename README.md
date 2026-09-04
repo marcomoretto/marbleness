@@ -8,13 +8,12 @@ design). See [CLAUDE.md](CLAUDE.md) for the full spec and rationale.
 
 ```
 app.py               # Streamlit UI / flow
-assignment.py         # deterministic per-curator queue (pure function)
+assignment.py         # deterministic per-session queue (pure function)
 storage.py             # Google Sheets results storage + local CSV backup
 scripts/
   resize_images.py     # one-off: downsize images/*.jpg for the web
   analyze.py            # inter/intra-rater reliability analysis
 images/                 # the 60 shared photos
-curators.csv            # allowed curator_id dropdown values
 .streamlit/secrets.toml.example
 ```
 
@@ -32,7 +31,7 @@ cp .streamlit/secrets.toml.example .streamlit/secrets.toml
 streamlit run app.py
 ```
 
-The app fails loudly on startup if it can't reach the Google Sheet — that's
+The app fails loudly on startup if it can't reach the Google Sheet, that's
 intentional (silent data loss is worse than a crash).
 
 ## One-time setup: Google Sheet + service account
@@ -48,12 +47,19 @@ intentional (silent data loss is worse than a crash).
 4. **Fill in secrets**: copy `.streamlit/secrets.toml.example` to
    `.streamlit/secrets.toml`, paste the JSON key's fields into
    `[gcp_service_account]`, and set `sheet_key` to the Sheet's key.
-   This file is gitignored — never commit it.
+   This file is gitignored, never commit it.
 
-## Curators
+## Curators & sessions
 
-Edit `curators.csv` to list your real curator IDs (one `curator_id` per
-row). This becomes the login dropdown — no passwords, low-stakes/internal.
+There's no fixed curator roster, the login screen is free text. The app
+suggests a random ID (e.g. `clever_otter_42`, shown in a copyable box) but
+the curator can type anything.
+
+A "session" is one attempt through the full queue. Re-entering an ID whose
+last session isn't finished **resumes** it (same image order, same
+progress, survives a closed tab/browser). Re-entering an ID whose last
+session *did* finish starts a brand-new session (fresh queue, recorded
+separately), so the same person can do multiple full passes over time.
 
 ## Prep images
 
@@ -64,7 +70,7 @@ any that exceed 1600px on the long edge (repo size + page load):
 uv run python scripts/resize_images.py
 ```
 
-Idempotent — safe to re-run; already-small images are skipped.
+Idempotent, safe to re-run; already-small images are skipped.
 
 ## Deploy (Streamlit Community Cloud)
 
@@ -73,10 +79,10 @@ Idempotent — safe to re-run; already-small images are skipped.
    pointing at `app.py`.
 3. In the app's **Settings → Secrets**, paste the same contents as your
    local `.streamlit/secrets.toml`.
-4. Deploy. The filesystem is ephemeral on Cloud — that's fine, because
+4. Deploy. The filesystem is ephemeral on Cloud, that's fine, because
    results are written straight to the Google Sheet on every advance, not
    to local disk. (A `results_backup.csv` will appear locally but is wiped
-   on redeploy — it's a redundant convenience, never the source of truth.)
+   on redeploy, it's a redundant convenience, never the source of truth.)
 
 ## Export / analyze results
 
@@ -94,4 +100,4 @@ This pulls the live Sheet and reports:
 - **Intra-rater consistency** from the hidden repeated images (first vs.
   repeat rating): mean absolute difference and correlation per curator.
 
-Run it any time — it works on partial data and reports how much it has.
+Run it any time, it works on partial data and reports how much it has.

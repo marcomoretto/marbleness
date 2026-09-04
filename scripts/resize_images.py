@@ -1,5 +1,5 @@
 """One-off: downsize images/*.jpg to max 1600px on the long edge, ~85%
-quality, preserving filenames in place. Idempotent — skips files already
+quality, preserving filenames in place. Idempotent, skips files already
 within the size limit. Run once before committing / redeploying.
 
 Usage:
