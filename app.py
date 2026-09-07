@@ -4,16 +4,14 @@ Curators rate trout photos 0 (fario) - 1 (marmorata) on a slider. See
 CLAUDE.md for full spec / data-integrity requirements this file implements.
 """
 
-import html
 import random
 import time
 from pathlib import Path
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 from assignment import build_queue, list_image_ids
-from storage import append_result, resume_or_new_session
+from storage import assign_new_id, append_result, id_status
 
 APP_VERSION = "1.0"
 IMAGE_DIR = Path("images")
@@ -22,9 +20,11 @@ SECONDS_PER_IMAGE_ESTIMATE = 15
 _N_IMAGES = len(list_image_ids(IMAGE_DIR))
 TOTAL_ITEMS = _N_IMAGES + min(N_REPEATS, _N_IMAGES)  # mirrors build_queue's clamp
 
-# Word lists for the suggested-id generator. Purely a convenience, the
-# curator_id field is free text, this just saves people from typing their
-# own. Large enough combination space (20*20*90) to rarely collide.
+# Word lists for the assigned-id generator. A curator_id is a one-time,
+# system-issued identifier, never freely chosen, this just makes it
+# memorable instead of a raw uuid. Large enough combination space
+# (20*20*90) that collisions are rare; storage.assign_new_id() still
+# checks uniqueness against the sheet before handing one out.
 _ADJECTIVES = [
     "brave", "calm", "clever", "curious", "eager", "gentle", "happy",
     "jolly", "kind", "lively", "mighty", "nimble", "proud", "quiet",
@@ -37,15 +37,16 @@ _ANIMALS = [
 ]
 
 CONSENT_SUMMARY = (
-    "We store your ratings, under the ID you choose here, for machine-"
-    "learning research. We don't collect anything else: no IP address, "
-    "no location, no browser/device info, no name or email."
+    "We store your ratings, under an ID assigned to you, to evaluate how "
+    "well a machine-learning model matches human judgment. We don't collect "
+    "anything else: no IP address, no location, no browser/device info, no "
+    "name or email."
 )
 
 CONSENT_FULL_TEXT = """
 ### What we collect
-- The ID you enter on the next screen (a pseudonym, you don't need to use your real name).
-- Your estimate for each photo (the 0–1 slider position, or "unsure").
+- The ID assigned to you when you start (not linked to your name or anything else).
+- Your estimate for each photo (the 0-1 slider position, or "unsure").
 - How long each photo stays on screen before you move on.
 - A timestamp for each response.
 
@@ -55,16 +56,17 @@ CONSENT_FULL_TEXT = """
 - No name, email, or other identifying information.
 
 ### How your data is used
-- Your ratings, together with other curators', become the human baseline
-  used to train and evaluate a machine-learning model that predicts the
-  same marmorata/fario score from photographs.
+- Your ratings, together with other curators', are used to evaluate how
+  closely a machine-learning model's predictions match human judgment.
+  They are not used to train that model.
 - Used only for this research project, never sold, shared with third
   parties, or repurposed beyond the marbleness project.
 
-### About the ID you choose
-- Because the ID is self-chosen and nothing else identifying is collected,
-  your responses can't be linked back to you unless you pick an ID that
-  identifies you personally. Using the suggested random ID avoids that.
+### About your ID
+- You're assigned a random ID (e.g. `clever_otter_42`) when you start; it
+  isn't linked to your name or anything else. Keep note of it, you'll need
+  it to resume if you leave partway through. Once you finish all photos
+  under an ID, that ID is done, a repeat pass needs a freshly assigned one.
 
 ### Participation is voluntary
 - You can stop at any time by closing the tab. Anything already submitted
@@ -127,16 +129,19 @@ def reset_per_image_state():
 
 def advance():
     item = current_item()
-    score = st.session_state.slider_value
+    slider_value = st.session_state.slider_value
+    # Score and "unsure" are independent: if the curator set a value and
+    # then also checked Unsure, we still keep the value they set. Score is
+    # blank only if the slider was never touched at all.
+    has_score = slider_value != UNTOUCHED
     unsure = st.session_state.unsure
     dwell = time.time() - st.session_state.shown_at
 
     row = {
         "curator_id": st.session_state.curator_id,
-        "session_id": st.session_state.session_id,
         "image_id": item["image_id"],
         "repeat_index": item["repeat_index"],
-        "score": "" if unsure else float(score),
+        "score": float(slider_value) if has_score else "",
         "unsure": unsure,
         "dwell_seconds": round(dwell, 2),
         "slider_touched": st.session_state.slider_touched,
@@ -148,6 +153,24 @@ def advance():
     st.session_state.done.add((item["image_id"], item["repeat_index"]))
     st.session_state.cursor += 1
     reset_per_image_state()
+
+
+def _start_queue(curator_id: str, done: set[tuple[str, int]]) -> None:
+    """Shared setup for both the new-id and resume paths."""
+    st.session_state.curator_id = curator_id
+    st.session_state.done = done
+
+    queue = build_queue(curator_id, IMAGE_DIR, n_repeats=N_REPEATS)
+    remaining = [
+        item for item in queue
+        if (item["image_id"], item["repeat_index"]) not in done
+    ]
+    st.session_state.queue = remaining
+    st.session_state.total_in_queue = len(queue)
+    st.session_state.cursor = 0
+    reset_per_image_state()
+
+    st.session_state.stage = "evaluate" if remaining else "complete"
 
 
 # ------------------------------------------------------------------ flow --
@@ -191,106 +214,48 @@ tell"** instead of guessing.
 # 2. Curator identification --------------------------------------------------
 if st.session_state.stage == "identify":
     st.header("Who are you?")
-    st.markdown(
-        "This ID identifies your ratings, if you've started before, "
-        "entering the same ID resumes where you left off. We've filled in "
-        "a suggestion; keep it, edit it, or generate another."
+
+    st.subheader("New here?")
+    st.caption(
+        "We assign you a unique ID, you can't pick your own. Keep note of "
+        "it: you'll need it to resume if you leave partway through."
     )
 
-    if "curator_id_input" not in st.session_state:
-        st.session_state.curator_id_input = new_suggestion()
+    if "assigned_id" not in st.session_state:
+        st.session_state.assigned_id = assign_new_id(new_suggestion)
 
-    def _regenerate_suggestion():
-        st.session_state.curator_id_input = new_suggestion()
-
-    col1, col2, col3 = st.columns([5, 1, 1])
+    col1, col2 = st.columns([4, 1])
     with col1:
-        st.text_input("Your ID", key="curator_id_input", label_visibility="collapsed")
+        st.code(st.session_state.assigned_id, language=None)  # has a built-in copy button
     with col2:
-        st.button("🔀 New", on_click=_regenerate_suggestion, help="Generate a different suggested ID")
-    with col3:
-        # st.markdown(unsafe_allow_html=True) strips event-handler attributes
-        # like onclick (Streamlit sanitizes even "unsafe" HTML), so a real
-        # <script> needs an actual embedded document: components.html, which
-        # renders in an iframe that does execute scripts. Value goes into a
-        # data-* attribute (HTML-escaped) rather than into the script text,
-        # so a curator typing quotes (or "</script>") into the ID field
-        # can't break out of the markup.
-        copy_value_attr = html.escape(st.session_state.curator_id_input, quote=True)
-        components.html(
-            f"""
-            <style>
-              html, body {{ margin:0; padding:0; height:100%; }}
-              .copy-wrap {{
-                height:100%; box-sizing:border-box; display:flex;
-                align-items:center; gap:6px; font-family:sans-serif;
-              }}
-            </style>
-            <div class="copy-wrap">
-              <button id="copy-btn" data-copy="{copy_value_attr}" title="Copy ID to clipboard"
-                style="width:2.5rem;height:2.5rem;flex:none;border-radius:0.5rem;
-                border:1px solid rgba(128,128,128,0.4);cursor:pointer;font-size:1.1rem;
-                background:transparent;">📋</button>
-              <span id="copy-feedback" style="font-size:0.8rem;color:#16a34a;opacity:0;
-                transition:opacity 0.3s;white-space:nowrap;">Copied!</span>
-            </div>
-            <script>
-              const btn = document.getElementById("copy-btn");
-              const feedback = document.getElementById("copy-feedback");
-              function flashCopied() {{
-                feedback.style.opacity = "1";
-                setTimeout(() => {{ feedback.style.opacity = "0"; }}, 1200);
-              }}
-              function fallbackCopy(text) {{
-                const ta = document.createElement("textarea");
-                ta.value = text;
-                ta.style.position = "fixed";
-                ta.style.opacity = "0";
-                document.body.appendChild(ta);
-                ta.focus();
-                ta.select();
-                try {{ document.execCommand("copy"); }} catch (e) {{}}
-                document.body.removeChild(ta);
-              }}
-              btn.addEventListener("click", function () {{
-                const text = btn.getAttribute("data-copy");
-                if (navigator.clipboard && navigator.clipboard.writeText) {{
-                  navigator.clipboard.writeText(text).then(flashCopied).catch(function () {{
-                    fallbackCopy(text);
-                    flashCopied();
-                  }});
-                }} else {{
-                  fallbackCopy(text);
-                  flashCopied();
-                }}
-              }});
-            </script>
-            """,
-            height=45,
-        )
+        if st.button("🔀 New", help="Get a different assigned ID"):
+            st.session_state.assigned_id = assign_new_id(new_suggestion)
+            st.rerun()
 
-    entered = st.session_state.curator_id_input.strip()
-
-    if st.button("Continue", type="primary", disabled=not entered):
-        session_id, done = resume_or_new_session(entered, TOTAL_ITEMS)
-
-        st.session_state.curator_id = entered
-        st.session_state.session_id = session_id
-        st.session_state.done = done
-
-        queue = build_queue(session_id, IMAGE_DIR, n_repeats=N_REPEATS)
-        # Resume: skip anything already recorded in this session.
-        remaining = [
-            item for item in queue
-            if (item["image_id"], item["repeat_index"]) not in done
-        ]
-        st.session_state.queue = remaining
-        st.session_state.total_in_queue = len(queue)
-        st.session_state.cursor = 0
-        reset_per_image_state()
-
-        st.session_state.stage = "evaluate" if remaining else "complete"
+    if st.button("Start with this ID", type="primary"):
+        # Freshly assigned by assign_new_id(), so guaranteed to have no
+        # existing rows: skip the sheet lookup and start straight in.
+        _start_queue(st.session_state.assigned_id, set())
         st.rerun()
+
+    st.divider()
+    st.subheader("Already started?")
+    resume_input = st.text_input("Enter your assigned ID to resume")
+
+    if st.button("Resume"):
+        candidate = resume_input.strip()
+        if not candidate:
+            st.warning("Enter an ID first.")
+        else:
+            status, done = id_status(candidate, TOTAL_ITEMS)
+            if status == "in_progress":
+                _start_queue(candidate, done)
+                st.rerun()
+            else:
+                st.error(
+                    "That ID doesn't exist or has already finished. "
+                    "Start a new session with a freshly assigned ID above."
+                )
     st.stop()
 
 # 3. Evaluation loop ----------------------------------------------------------

@@ -5,21 +5,19 @@ Streamlit Community Cloud's filesystem is ephemeral, so the Sheet is the
 source of truth. The local CSV only helps if you're running locally or
 want a quick offline copy; it is wiped on every cloud redeploy.
 
-Interface is kept small and swappable: append_result(row) /
-resume_or_new_session(id, total). A Postgres backend (Supabase/Neon via
-st.connection) would implement the same two functions and could be
-swapped in without touching app.py.
+Interface is kept small and swappable: append_result(row), id_status(id),
+assign_new_id(candidate_fn). A Postgres backend (Supabase/Neon via
+st.connection) would implement the same functions and could be swapped in
+without touching app.py.
 
-Sessions: a curator_id is free text (no fixed roster) and can attempt the
-survey more than once over time. Each attempt is a "session", its own
-session_id, its own deterministic image order (assignment.build_queue is
-seeded by session_id, not curator_id). A session is "complete" once it has
-as many rows as the queue is long. resume_or_new_session() finds a
-curator_id's most recent session and either resumes it (if incomplete) or
-mints a fresh one (if complete or nonexistent).
+Identity model: curator_id is a one-time, system-assigned identifier (see
+assign_new_id), never freely chosen. It maps 1:1 to exactly one lifetime
+attempt at the survey: id_status() reports whether it's never been used,
+in progress (fewer rows than the queue is long, resumable), or completed
+(as many rows as the queue is long, done for good, a repeat pass needs a
+new id).
 """
 
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 import csv
@@ -36,7 +34,6 @@ except ImportError:  # allows scripts/analyze.py-free local smoke tests
 COLUMNS = [
     "timestamp_iso",
     "curator_id",
-    "session_id",
     "image_id",
     "repeat_index",
     "score",
@@ -131,49 +128,54 @@ def _append_local_backup(row: dict) -> None:
         pass  # local backup is a convenience only; never block on it
 
 
-def _new_session_id() -> str:
-    return uuid.uuid4().hex[:12]
-
-
-def resume_or_new_session(curator_id: str, total_items: int) -> tuple[str, set[tuple[str, int]]]:
-    """Decide which session this curator_id should continue (or start).
-
-    Returns (session_id, done) where `done` is the set of (image_id,
-    repeat_index) pairs already recorded in that session, empty for a
-    brand-new session.
-
-    Logic: look at this curator_id's most recent session (by latest
-    timestamp among its rows). If it has fewer rows than `total_items`,
-    it's unfinished, resume it. Otherwise (finished, or no session
-    exists yet), start a new one. This is also the double-write guard:
-    resuming replays the same session_id/queue, so items already in
-    `done` are skipped rather than re-appended.
-    """
+def _rows_for(curator_id: str) -> list[dict]:
     ws = _worksheet()
     records = ws.get_all_records()  # list[dict] keyed by header row
-    rows = [r for r in records if str(r.get("curator_id")) == str(curator_id)]
+    return [r for r in records if str(r.get("curator_id")) == str(curator_id)]
 
+
+def id_status(curator_id: str, total_items: int) -> tuple[str, set[tuple[str, int]]]:
+    """Status of a curator_id: "not_found", "in_progress", or "completed".
+
+    For "in_progress", also returns the (image_id, repeat_index) pairs
+    already recorded, so the caller can resume from there. Empty set for
+    the other two statuses.
+    """
+    rows = _rows_for(curator_id)
     if not rows:
-        return _new_session_id(), set()
-
-    sessions: dict[str, list[dict]] = {}
-    for r in rows:
-        sessions.setdefault(str(r.get("session_id")), []).append(r)
-
-    latest_sid = max(
-        sessions, key=lambda sid: max(r.get("timestamp_iso", "") for r in sessions[sid])
-    )
-    latest_rows = sessions[latest_sid]
-
-    if len(latest_rows) >= total_items:
-        return _new_session_id(), set()  # last session finished -> fresh attempt
+        return "not_found", set()
+    if len(rows) >= total_items:
+        return "completed", set()
 
     done = set()
-    for r in latest_rows:
+    for r in rows:
         image_id = r.get("image_id")
         try:
             repeat_index = int(r.get("repeat_index", 0))
         except (TypeError, ValueError):
             repeat_index = 0
         done.add((image_id, repeat_index))
-    return latest_sid, done
+    return "in_progress", done
+
+
+def assign_new_id(candidate_fn, max_attempts: int = 30) -> str:
+    """A fresh curator_id that has never been used before.
+
+    `candidate_fn()` produces a random candidate string (see
+    app.py:new_suggestion). Reads the sheet once for all curator_ids ever
+    used, then retries candidates locally until one is unused, avoiding a
+    sheet round-trip per attempt.
+
+    Small race window between this check and the curator's first write is
+    accepted at this project's scale (~10 curators); not worth the added
+    complexity of reserving ids ahead of use.
+    """
+    ws = _worksheet()
+    records = ws.get_all_records()
+    used = {str(r.get("curator_id")) for r in records}
+
+    for _ in range(max_attempts):
+        candidate = candidate_fn()
+        if candidate not in used:
+            return candidate
+    raise RuntimeError("Could not find an unused ID after many attempts.")

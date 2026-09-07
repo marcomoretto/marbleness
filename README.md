@@ -8,7 +8,7 @@ design). See [CLAUDE.md](CLAUDE.md) for the full spec and rationale.
 
 ```
 app.py               # Streamlit UI / flow
-assignment.py         # deterministic per-session queue (pure function)
+assignment.py         # deterministic per-curator queue (pure function)
 storage.py             # Google Sheets results storage + local CSV backup
 scripts/
   resize_images.py     # one-off: downsize images/*.jpg for the web
@@ -49,17 +49,17 @@ intentional (silent data loss is worse than a crash).
    `[gcp_service_account]`, and set `sheet_key` to the Sheet's key.
    This file is gitignored, never commit it.
 
-## Curators & sessions
+## Curators & IDs
 
-There's no fixed curator roster, the login screen is free text. The app
-suggests a random ID (e.g. `clever_otter_42`, shown in a copyable box) but
-the curator can type anything.
+There's no fixed roster and no free-text choice for a new attempt: the app
+assigns a random ID (e.g. `clever_otter_42`), checked unique against the
+sheet, shown read-only with a copy button and a reroll button.
 
-A "session" is one attempt through the full queue. Re-entering an ID whose
-last session isn't finished **resumes** it (same image order, same
-progress, survives a closed tab/browser). Re-entering an ID whose last
-session *did* finish starts a brand-new session (fresh queue, recorded
-separately), so the same person can do multiple full passes over time.
+Each ID maps to exactly one lifetime attempt through the full queue.
+Entering a previously assigned ID **resumes** it if unfinished (same image
+order, same progress, survives a closed tab/browser). Entering an ID that's
+unknown or already finished shows an error, pointing them at getting a new
+assigned ID instead, an ID can't be reused for a second pass.
 
 ## Prep images
 
