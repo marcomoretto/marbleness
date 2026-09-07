@@ -184,7 +184,7 @@ if "stage" not in st.session_state:
 if st.session_state.stage == "consent":
     st.header("Before you begin")
     st.markdown(
-        """
+        f"""
 Thank you for helping evaluate trout photographs.
 
 For each photo, estimate on a slider how the fish looks between two
@@ -193,9 +193,10 @@ extremes:
 - **0.0**, pure Atlantic **fario** (brown trout)
 - **1.0**, pure marble trout **marmorata**
 
-Please use the whole scale including the middle, if that's genuinely
-your judgement. If a photo doesn't let you tell, check **"Unsure / can't
-tell"** instead of guessing.
+Please use the whole scale, including the middle, if that's genuinely your
+judgement. You will be seeing {TOTAL_ITEMS} images uniformly distributed
+across the entire scale. If a photo doesn't let you tell, check **"Unsure
+/ can't tell"** instead of guessing.
 """
     )
 

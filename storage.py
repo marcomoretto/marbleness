@@ -53,10 +53,17 @@ SCOPES = [
 
 
 @st.cache_resource(show_spinner=False)
-def _worksheet():
+def _connect():
     """Open (and fail loudly on) the results worksheet.
 
     Cached per-process: one gspread client/session for the app's lifetime.
+    Deliberately does NOT check/create the header row, that's cheap enough
+    to redo on every call (see _worksheet), and caching it here would mean
+    it only ever runs once per process. If someone manually clears the
+    sheet (header included) mid-lifetime, a cached one-time check would
+    never notice, appends would silently land in row 1 as if it were data,
+    and every lookup after that would misread that data row as the header
+    (this happened once; see git history).
     """
     if gspread is None:
         raise RuntimeError(
@@ -75,14 +82,20 @@ def _worksheet():
 
     try:
         sheet = client.open_by_key(sheet_key)
-        ws = sheet.sheet1
+        return sheet.sheet1
     except Exception as e:  # noqa: BLE001 - fail loudly per spec
         raise RuntimeError(
             f"Could not reach Google Sheet (key={sheet_key!r}). "
             f"Check sharing + secrets. Original error: {e}"
         ) from e
 
-    # Ensure header row exists (first run against a fresh sheet).
+
+def _worksheet():
+    """The results worksheet, with its header row verified/recreated on
+    every call. Self-heals if the sheet is ever wiped clean mid-session;
+    if it's wiped down to a non-empty, non-matching row 1 instead, fails
+    loudly rather than silently misreading data as headers."""
+    ws = _connect()
     first_row = ws.row_values(1)
     if first_row != COLUMNS:
         if first_row:
@@ -91,7 +104,6 @@ def _worksheet():
                 f"Found: {first_row}. Fix the sheet or COLUMNS."
             )
         ws.append_row(COLUMNS, value_input_option="RAW")
-
     return ws
 
 
