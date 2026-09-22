@@ -10,6 +10,7 @@ design). See [CLAUDE.md](CLAUDE.md) for the full spec and rationale.
 app.py               # Streamlit UI / flow
 assignment.py         # deterministic per-curator queue (pure function)
 storage.py             # Google Sheets results storage + local CSV backup
+i18n.py                 # Italian/English UI strings + t() lookup
 scripts/
   resize_images.py     # one-off: downsize images/*.jpg for the web
   analyze.py            # inter/intra-rater reliability analysis
@@ -52,7 +53,7 @@ intentional (silent data loss is worse than a crash).
 ## Curators & IDs
 
 There's no fixed roster and no free-text choice for a new attempt: the app
-assigns a random ID (e.g. `clever_otter_42`), checked unique against the
+assigns a random ID (e.g. `clever_trout_42`), checked unique against the
 sheet, shown read-only with a copy button and a reroll button.
 
 Each ID maps to exactly one lifetime attempt through the full queue.
@@ -60,6 +61,15 @@ Entering a previously assigned ID **resumes** it if unfinished (same image
 order, same progress, survives a closed tab/browser). Entering an ID that's
 unknown or already finished shows an error, pointing them at getting a new
 assigned ID instead, an ID can't be reused for a second pass.
+
+## Language
+
+The app defaults to Italian, with a switcher (top of every screen) to
+toggle English/Italian at any point. Switching never resets progress, the
+curator's queue position, ID, and answers so far are untouched, only the
+displayed text changes. All UI strings live in `i18n.py`; curator IDs,
+image filenames, and anything written to the results sheet are never
+translated.
 
 ## Prep images
 

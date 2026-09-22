@@ -1,0 +1,67 @@
+Trout
+Salmon
+Carp
+Catfish
+Pike
+Perch
+Zander
+Pikeperch
+Largemouth bass
+Sturgeon
+Eel
+Goldfish
+Guppy
+Betta
+Siamese fighting fish
+Angelfish
+Piranha
+Tilapia
+Chub
+Barbel
+Tench
+Grayling
+Roach
+Bream
+Arowana
+Discus
+Tuna
+Cod
+Sea bass
+Gilt-head bream
+Sea bream
+Swordfish
+Mackerel
+Sardine
+Anchovy
+Shark
+Sole
+Flounder
+Plaice
+Halibut
+Red mullet
+Grouper
+Dentex
+Snapper
+Turbot
+Monkfish
+Anglerfish
+Hake
+Herring
+Clownfish
+Barracuda
+Ray
+Skate
+Manta ray
+Moray eel
+Amberjack
+John Dory
+Mahi-mahi
+Dorado
+Seahorse
+Pufferfish
+Blowfish
+Flying fish
+Red snapper
+Lionfish
+Parrotfish
+Surgeonfish

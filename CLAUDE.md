@@ -21,6 +21,7 @@ marbleness/
   app.py             # you create
   assignment.py      # you create
   storage.py         # you create
+  i18n.py            # you create (Italian/English UI strings)
   scripts/
     analyze.py       # you create (analysis)
     resize_images.py # you create (one-off image prep)
@@ -87,16 +88,24 @@ marbleness/
 
 9. **System-assigned, unique curator IDs.** No free-text choice for a new
    attempt. The app generates a random human-readable id
-   (adjective_animal_number) and checks it against every curator_id already
+   (adjective_fish_number) and checks it against every curator_id already
    in the sheet, retrying until one is unused, before handing it to the
    curator. That id is shown read-only (not editable) with a way to copy
    it and a way to reroll for a different one before starting.
+
+10. **Italian + English, switchable at any point.** Curators are mostly
+    Italian-speaking, so the app defaults to Italian with a switcher
+    (`st.session_state.lang`) visible on every screen. Switching language
+    must never reset progress (queue/cursor/curator_id/done), it only
+    re-renders the same state in the other language. All UI strings live
+    in `i18n.py`, not inline in `app.py`. Curator IDs, image filenames,
+    and anything written to the results sheet are never translated.
 
 ## Data model
 
 ### Curator identification
 No fixed roster and no free-text choice for a new id: the app assigns a
-random human-readable id (adjective_animal_number, e.g. `clever_otter_42`),
+random human-readable id (adjective_fish_number, e.g. `clever_trout_42`),
 checked unique against the sheet, shown read-only with a copy button and a
 reroll button. To resume, a curator types in a previously assigned id; it
 only works if that id has an unfinished attempt. No passwords, low-stakes,
@@ -110,6 +119,9 @@ independent of score), `dwell_seconds` (time image was on screen),
 
 ## Screens / flow
 
+A language switcher (Italian/English, defaulting to Italian) is visible on
+every screen, independent of the stage flow below.
+
 1. **Consent + instructions.** Brief task explanation ("estimate how marble vs
    Atlantic this trout looks: 0 = pure Atlantic fario, 1 = pure marble
    marmorata; use the whole scale"), note that responses are recorded, and an
@@ -120,8 +132,8 @@ independent of score), `dwell_seconds` (time image was on screen),
    type a previously assigned id, press Resume, works only if that id has
    an unfinished attempt (otherwise: error, get a new assigned id instead).
 3. **Evaluation loop**, for each remaining item:
-   - Progress bar `Image {n} of {total}` + rough time left
-     (`remaining × ~15s`).
+   - Progress bar `Image {n} of {total}` + percent complete (`n_done /
+     total`). Deliberately no time estimate, that adds pressure.
    - The image, large, centered, `use_container_width=True`, served from bytes.
    - Slider 0.00–1.00 step 0.01, NO 0.5 default.
    - "Unsure / can't tell" checkbox.
@@ -132,7 +144,15 @@ independent of score), `dwell_seconds` (time image was on screen),
 
 ## Technical notes
 
-- **Framework:** Streamlit. `app.py` + `storage.py` + `assignment.py`.
+- **Framework:** Streamlit. `app.py` + `storage.py` + `assignment.py` + `i18n.py`.
+- **i18n.py:** `t(key, lang=None, **kwargs) -> str` looks up `key` in
+  `lang` (or the live `st.session_state.lang` if omitted), formats any
+  `**kwargs` placeholders. Two plain dicts (`"it"`/`"en"`), no external
+  i18n library, the string set is small and has no pluralization
+  complexity. A widget whose *label* changes with language needs an
+  explicit `key=` (e.g. the consent checkbox, the resume-id text input),
+  otherwise Streamlit treats the re-labeled widget as a new instance on
+  language switch and silently drops its value.
 - **assignment.py:** `build_queue(curator_id, image_dir, n_repeats) -> list[dict]`
   returning ordered items `{image_id, repeat_index, queue_position}`,
   deterministic from `hash(curator_id)`. Pure function, no I/O beyond listing
@@ -161,7 +181,7 @@ independent of score), `dwell_seconds` (time image was on screen),
 
 ## Deliverables
 
-1. `app.py`, `storage.py`, `assignment.py` implementing all the above.
+1. `app.py`, `storage.py`, `assignment.py`, `i18n.py` implementing all the above.
 2. `scripts/resize_images.py`, one-off: downsize `images/*.jpg` to max 1600px
    long edge, ~85% quality, preserving filenames. Idempotent; skips already-small
    files. (Pillow.)

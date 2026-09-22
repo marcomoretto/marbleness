@@ -10,74 +10,58 @@ from pathlib import Path
 
 import streamlit as st
 
+import i18n
+from i18n import t
 from assignment import build_queue, list_image_ids
 from storage import assign_new_id, append_result, id_status
 
 APP_VERSION = "1.0"
 IMAGE_DIR = Path("images")
 N_REPEATS = 4
-SECONDS_PER_IMAGE_ESTIMATE = 15
 _N_IMAGES = len(list_image_ids(IMAGE_DIR))
 TOTAL_ITEMS = _N_IMAGES + min(N_REPEATS, _N_IMAGES)  # mirrors build_queue's clamp
 
 # Word lists for the assigned-id generator. A curator_id is a one-time,
 # system-issued identifier, never freely chosen, this just makes it
 # memorable instead of a raw uuid. Large enough combination space
-# (20*20*90) that collisions are rare; storage.assign_new_id() still
+# (20*67*90) that collisions are rare; storage.assign_new_id() still
 # checks uniqueness against the sheet before handing one out.
 _ADJECTIVES = [
     "brave", "calm", "clever", "curious", "eager", "gentle", "happy",
     "jolly", "kind", "lively", "mighty", "nimble", "proud", "quiet",
     "quick", "sunny", "swift", "witty", "bold", "bright",
 ]
-_ANIMALS = [
-    "dolphin", "falcon", "otter", "panther", "heron", "lynx", "badger",
-    "raven", "marlin", "koala", "gecko", "ibis", "puffin", "wombat",
-    "tiger", "salmon", "osprey", "viper", "hare", "owl",
+# Fish names (from fish_names.txt), lowercased and underscore-joined for a
+# valid id. Themed to match the survey, replaces a generic animal list.
+_FISH_NAMES = [
+    "trout", "salmon", "carp", "catfish", "pike", "perch", "zander",
+    "pikeperch", "largemouth_bass", "sturgeon", "eel", "goldfish",
+    "guppy", "betta", "siamese_fighting_fish", "angelfish", "piranha",
+    "tilapia", "chub", "barbel", "tench", "grayling", "roach", "bream",
+    "arowana", "discus", "tuna", "cod", "sea_bass", "gilt_head_bream",
+    "sea_bream", "swordfish", "mackerel", "sardine", "anchovy", "shark",
+    "sole", "flounder", "plaice", "halibut", "red_mullet", "grouper",
+    "dentex", "snapper", "turbot", "monkfish", "anglerfish", "hake",
+    "herring", "clownfish", "barracuda", "ray", "skate", "manta_ray",
+    "moray_eel", "amberjack", "john_dory", "mahi_mahi", "dorado",
+    "seahorse", "pufferfish", "blowfish", "flying_fish", "red_snapper",
+    "lionfish", "parrotfish", "surgeonfish",
 ]
 
-CONSENT_SUMMARY = (
-    "We store your ratings, under an ID assigned to you, to evaluate how "
-    "well a machine-learning model matches human judgment. We don't collect "
-    "anything else: no IP address, no location, no browser/device info, no "
-    "name or email."
-)
-
-CONSENT_FULL_TEXT = """
-### What we collect
-- The ID assigned to you when you start (not linked to your name or anything else).
-- Your estimate for each photo (the 0-1 slider position, or "unsure").
-- How long each photo stays on screen before you move on.
-- A timestamp for each response.
-
-### What we do NOT collect
-- No IP address, device, browser, or geographic location.
-- No cookies or tracking beyond keeping your place in the survey.
-- No name, email, or other identifying information.
-
-### How your data is used
-- Your ratings, together with other curators', are used to evaluate how
-  closely a machine-learning model's predictions match human judgment.
-  They are not used to train that model.
-- Used only for this research project, never sold, shared with third
-  parties, or repurposed beyond the marbleness project.
-
-### About your ID
-- You're assigned a random ID (e.g. `clever_otter_42`) when you start; it
-  isn't linked to your name or anything else. Keep note of it, you'll need
-  it to resume if you leave partway through. Once you finish all photos
-  under an ID, that ID is done, a repeat pass needs a freshly assigned one.
-
-### Participation is voluntary
-- You can stop at any time by closing the tab. Anything already submitted
-  stays recorded; nothing further is collected after you leave.
-"""
-
-
-@st.dialog("Full consent statement")
+# Fixed bilingual title, not run through t(): @st.dialog's title argument
+# is evaluated once at decoration time (module load), not per-render, so
+# it can't reactively re-translate if the curator switches language later.
+@st.dialog("Consent statement / Dichiarazione di consenso")
 def show_consent_dialog():
-    st.markdown(CONSENT_FULL_TEXT)
-    if st.button("Close"):
+    for key in (
+        "consent_full_collect",
+        "consent_full_not_collect",
+        "consent_full_usage",
+        "consent_full_id",
+        "consent_full_voluntary",
+    ):
+        st.markdown(t(key))
+    if st.button(t("consent_dialog_close_button")):
         st.rerun()
 
 
@@ -94,7 +78,7 @@ st.set_page_config(page_title="marbleness", layout="centered")
 # ---------------------------------------------------------------- helpers --
 
 def new_suggestion() -> str:
-    return f"{random.choice(_ADJECTIVES)}_{random.choice(_ANIMALS)}_{random.randint(10, 99)}"
+    return f"{random.choice(_ADJECTIVES)}_{random.choice(_FISH_NAMES)}_{random.randint(10, 99)}"
 
 
 @st.cache_data
@@ -175,6 +159,21 @@ def _start_queue(curator_id: str, done: set[tuple[str, int]]) -> None:
 
 # ------------------------------------------------------------------ flow --
 
+if "lang" not in st.session_state:
+    st.session_state.lang = i18n.DEFAULT_LANGUAGE
+
+# Fixed bilingual label, not run through t(): avoids a chicken-and-egg
+# translation of the switcher that controls the translation.
+_lang_col = st.columns([5, 2])[1]
+with _lang_col:
+    st.selectbox(
+        "Language / Lingua",
+        options=list(i18n.LANGUAGES.keys()),
+        format_func=lambda code: i18n.LANGUAGES[code],
+        key="lang",
+        label_visibility="collapsed",
+    )
+
 st.title("marbleness")
 
 if "stage" not in st.session_state:
@@ -182,45 +181,27 @@ if "stage" not in st.session_state:
 
 # 1. Consent + instructions -------------------------------------------------
 if st.session_state.stage == "consent":
-    st.header("Before you begin")
-    st.markdown(
-        f"""
-Thank you for helping evaluate trout photographs.
-
-For each photo, estimate on a slider how the fish looks between two
-extremes:
-
-- **0.0**, pure Atlantic **fario** (brown trout)
-- **1.0**, pure marble trout **marmorata**
-
-Please use the whole scale, including the middle, if that's genuinely your
-judgement. You will be seeing {TOTAL_ITEMS} images uniformly distributed
-across the entire scale. If a photo doesn't let you tell, check **"Unsure
-/ can't tell"** instead of guessing.
-"""
-    )
+    st.header(t("consent_header"))
+    st.markdown(t("consent_intro", total_items=TOTAL_ITEMS))
 
     st.divider()
-    st.subheader("Data & consent")
-    st.markdown(CONSENT_SUMMARY)
-    if st.button("📄 Read the full statement"):
+    st.subheader(t("consent_data_header"))
+    st.markdown(t("consent_summary"))
+    if st.button(t("consent_read_full_button")):
         show_consent_dialog()
 
-    agreed = st.checkbox("I have read and agree to the statement above.")
-    if st.button("I agree, begin", type="primary", disabled=not agreed):
+    agreed = st.checkbox(t("consent_agree_checkbox"), key="agreed")
+    if st.button(t("consent_agree_button"), type="primary", disabled=not agreed):
         st.session_state.stage = "identify"
         st.rerun()
     st.stop()
 
 # 2. Curator identification --------------------------------------------------
 if st.session_state.stage == "identify":
-    st.header("Who are you?")
+    st.header(t("identify_header"))
 
-    st.subheader("New here?")
-    st.caption(
-        "We assign you a unique ID, you can't pick your own. Keep note of "
-        "it: you'll need it to resume if you leave partway through."
-    )
+    st.subheader(t("identify_new_subheader"))
+    st.caption(t("identify_new_caption"))
 
     if "assigned_id" not in st.session_state:
         st.session_state.assigned_id = assign_new_id(new_suggestion)
@@ -229,34 +210,31 @@ if st.session_state.stage == "identify":
     with col1:
         st.code(st.session_state.assigned_id, language=None)  # has a built-in copy button
     with col2:
-        if st.button("🔀 New", help="Get a different assigned ID"):
+        if st.button(t("identify_new_button"), help=t("identify_new_button_help")):
             st.session_state.assigned_id = assign_new_id(new_suggestion)
             st.rerun()
 
-    if st.button("Start with this ID", type="primary"):
+    if st.button(t("identify_start_button"), type="primary"):
         # Freshly assigned by assign_new_id(), so guaranteed to have no
         # existing rows: skip the sheet lookup and start straight in.
         _start_queue(st.session_state.assigned_id, set())
         st.rerun()
 
     st.divider()
-    st.subheader("Already started?")
-    resume_input = st.text_input("Enter your assigned ID to resume")
+    st.subheader(t("identify_resume_subheader"))
+    resume_input = st.text_input(t("identify_resume_input_label"), key="resume_id_input")
 
-    if st.button("Resume"):
+    if st.button(t("identify_resume_button")):
         candidate = resume_input.strip()
         if not candidate:
-            st.warning("Enter an ID first.")
+            st.warning(t("identify_resume_warning_empty"))
         else:
             status, done = id_status(candidate, TOTAL_ITEMS)
             if status == "in_progress":
                 _start_queue(candidate, done)
                 st.rerun()
             else:
-                st.error(
-                    "That ID doesn't exist or has already finished. "
-                    "Start a new session with a freshly assigned ID above."
-                )
+                st.error(t("identify_resume_error_unknown"))
     st.stop()
 
 # 3. Evaluation loop ----------------------------------------------------------
@@ -268,32 +246,34 @@ if st.session_state.stage == "evaluate":
 
     total = st.session_state.total_in_queue
     n_done = len(st.session_state.done)
-    remaining_n = total - n_done
+    percent = round(n_done / total * 100) if total else 100
 
     st.progress(n_done / total if total else 1.0)
-    st.caption(
-        f"Image {n_done + 1} of {total}, "
-        f"about {remaining_n * SECONDS_PER_IMAGE_ESTIMATE // 60} min left"
-    )
+    st.caption(t(
+        "evaluate_progress_caption",
+        n=n_done + 1,
+        total=total,
+        percent=percent,
+    ))
 
     image_bytes = load_image_bytes(item["image_id"])
     st.image(image_bytes, use_container_width=True)
 
     st.select_slider(
-        "0 = pure fario · 1 = pure marmorata",
+        t("evaluate_slider_label"),
         options=SLIDER_OPTIONS,
         key="slider_value",
         on_change=on_slider_change,
     )
     st.checkbox(
-        "Unsure / can't tell",
+        t("evaluate_unsure_checkbox"),
         key="unsure",
         on_change=on_unsure_change,
     )
 
     can_advance = st.session_state.slider_touched or st.session_state.unsure
     if not can_advance:
-        st.caption("Move the slider (or check Unsure) to continue.")
+        st.caption(t("evaluate_touch_hint"))
 
     # advance() must run as an on_click callback, not inline after the
     # button check: callbacks run *before* widgets are re-instantiated for
@@ -301,13 +281,11 @@ if st.session_state.stage == "evaluate":
     # session_state.slider_value (the select_slider's own key). Doing it
     # inline here would hit StreamlitWidgetAlreadyInstantiatedError since
     # the slider widget already rendered earlier in this same run.
-    st.button("Next", type="primary", disabled=not can_advance, on_click=advance)
+    st.button(t("evaluate_next_button"), type="primary", disabled=not can_advance, on_click=advance)
     st.stop()
 
 # 4. Completion ---------------------------------------------------------------
 if st.session_state.stage == "complete":
-    st.header("All done, thank you!")
-    st.markdown(
-        "Your ratings have been recorded. You can safely close this tab."
-    )
+    st.header(t("complete_header"))
+    st.markdown(t("complete_body"))
     st.stop()
