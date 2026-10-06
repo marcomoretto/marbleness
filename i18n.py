@@ -19,8 +19,10 @@ _STRINGS = {
             "- **1.0**, trota marmorata pura (trota marmorata)\n\n"
             "Usa l'intera scala, compreso il centro, se lo ritieni corretto. "
             "Vedrai {total_items} immagini distribuite uniformemente lungo l'intera "
-            "scala. Usa l'opzione **\"Non "
-            "sicuro/a\"** per tutti quei casi in cui sei incerto/a."
+            "scala.\n\n"
+            "Ti chiediamo di dare una risposta per ogni foto, anche se è una stima. "
+            "Se non sei sicuro/a del tuo giudizio, seleziona **\"Bassa confidenza\"** "
+            "per indicarlo: non serve a saltare la foto."
         ),
         "consent_data_header": "Dati e consenso",
         "consent_summary": (
@@ -36,7 +38,7 @@ _STRINGS = {
         "consent_full_collect": (
             "### Cosa raccogliamo\n"
             "- L'ID assegnato all'avvio (non collegato al tuo nome o altro).\n"
-            "- La tua stima per ogni foto (valore numerico da 0 a 1, oppure \"non sicuro/a\").\n"
+            "- La tua stima per ogni foto (valore numerico da 0 a 1) e il livello di confidenza che indichi.\n"
             "- Quanto tempo resta a schermo ogni foto prima che tu proceda.\n"
             "- Un timestamp per ogni risposta."
         ),
@@ -85,8 +87,8 @@ _STRINGS = {
         ),
         "evaluate_progress_caption": "Immagine {n} di {total}, {percent}% completato",
         "evaluate_slider_label": "0 = fario pura · 1 = marmorata pura",
-        "evaluate_unsure_checkbox": "Non sicuro/a",
-        "evaluate_touch_hint": "Muovi il cursore (o seleziona Non sicuro/a) per continuare.",
+        "evaluate_unsure_checkbox": "Bassa confidenza",
+        "evaluate_touch_hint": "Muovi il cursore per dare la tua stima, poi continua.",
         "evaluate_next_button": "Avanti",
         "complete_header": "Fatto, grazie!",
         "complete_body": "Le tue valutazioni sono state registrate. Puoi chiudere questa scheda.",
@@ -101,8 +103,10 @@ _STRINGS = {
             "- **1.0**, pure marble trout **marmorata**\n\n"
             "Please use the whole scale, including the middle, if that's genuinely your "
             "judgement. You will be seeing {total_items} images uniformly distributed "
-            "across the entire scale. If a photo doesn't let you tell, check **\"Unsure "
-            "/ can't tell\"** instead of guessing."
+            "across the entire scale.\n\n"
+            "Please give an answer for every photo, even if it's a guess. If you're not "
+            "confident in your judgement, tick **\"Low confidence\"** to say so. It's "
+            "not a way to skip the photo."
         ),
         "consent_data_header": "Data & consent",
         "consent_summary": (
@@ -118,7 +122,7 @@ _STRINGS = {
         "consent_full_collect": (
             "### What we collect\n"
             "- The ID assigned to you when you start (not linked to your name or anything else).\n"
-            "- Your estimate for each photo (the 0-1 slider position, or \"unsure\").\n"
+            "- Your estimate for each photo (the 0-1 slider position) and the confidence level you indicate.\n"
             "- How long each photo stays on screen before you move on.\n"
             "- A timestamp for each response."
         ),
@@ -167,8 +171,8 @@ _STRINGS = {
         ),
         "evaluate_progress_caption": "Image {n} of {total}, {percent}% complete",
         "evaluate_slider_label": "0 = pure fario · 1 = pure marmorata",
-        "evaluate_unsure_checkbox": "Unsure / can't tell",
-        "evaluate_touch_hint": "Move the slider (or check Unsure) to continue.",
+        "evaluate_unsure_checkbox": "Low confidence",
+        "evaluate_touch_hint": "Move the slider to give your estimate, then continue.",
         "evaluate_next_button": "Next",
         "complete_header": "All done, thank you!",
         "complete_body": "Your ratings have been recorded. You can safely close this tab.",

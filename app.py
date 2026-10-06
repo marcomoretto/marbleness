@@ -93,11 +93,6 @@ def on_slider_change():
     st.session_state.slider_touched = True
 
 
-def on_unsure_change():
-    # Toggling "unsure" also counts as a deliberate interaction.
-    pass
-
-
 def current_item():
     q = st.session_state.queue
     i = st.session_state.cursor
@@ -113,20 +108,16 @@ def reset_per_image_state():
 
 def advance():
     item = current_item()
-    slider_value = st.session_state.slider_value
-    # Score and "unsure" are independent: if the curator set a value and
-    # then also checked Unsure, we still keep the value they set. Score is
-    # blank only if the slider was never touched at all.
-    has_score = slider_value != UNTOUCHED
-    unsure = st.session_state.unsure
+    # Next is only enabled once a real score is set (see can_advance below),
+    # so slider_value is always numeric here.
     dwell = time.time() - st.session_state.shown_at
 
     row = {
         "curator_id": st.session_state.curator_id,
         "image_id": item["image_id"],
         "repeat_index": item["repeat_index"],
-        "score": float(slider_value) if has_score else "",
-        "unsure": unsure,
+        "score": float(st.session_state.slider_value),
+        "unsure": st.session_state.unsure,
         "dwell_seconds": round(dwell, 2),
         "slider_touched": st.session_state.slider_touched,
         "queue_position": item["queue_position"],
@@ -265,13 +256,10 @@ if st.session_state.stage == "evaluate":
         key="slider_value",
         on_change=on_slider_change,
     )
-    st.checkbox(
-        t("evaluate_unsure_checkbox"),
-        key="unsure",
-        on_change=on_unsure_change,
-    )
+    st.checkbox(t("evaluate_unsure_checkbox"), key="unsure")
 
-    can_advance = st.session_state.slider_touched or st.session_state.unsure
+    # Every photo needs a numeric score; "unsure" only flags low confidence.
+    can_advance = st.session_state.slider_value != UNTOUCHED
     if not can_advance:
         st.caption(t("evaluate_touch_hint"))
 

@@ -71,14 +71,15 @@ marbleness/
    identical queue) but differs across curators (removes order/fatigue
    confounds on specific images).
 
-7. **No mid-scale default anchor.** The slider must NOT pre-fill at 0.5 (it
-   biases responses toward the hybrid middle, exactly what we care about).
-   Require a deliberate interaction before "Next" is enabled (track a
-   `slider_touched` flag via an `on_change` callback, or an explicit "estimate
-   set" control). Provide an **"Unsure / can't tell"** checkbox as an
-   independent flag, not a replacement for the score: if the curator set a
-   slider value and then also checked Unsure, keep the value they set. Score
-   is blank only when the slider was never touched at all.
+7. **No mid-scale default anchor, and every photo gets a score.** The slider
+   must NOT pre-fill at 0.5 (it biases responses toward the hybrid middle,
+   exactly what we care about). "Next" is enabled only once the slider holds a
+   real value (not the untouched sentinel). There is no skip: every rating
+   needs a numeric score, even a guess, because skipped items make the results
+   sparse and uninterpretable. A **"Low confidence"** checkbox is a separate
+   flag recording the curator's confidence in that score; it never advances or
+   replaces the score. Analysis keeps low-confidence ratings by default, with a
+   `--exclude-low-confidence` sensitivity option.
 
 8. **Intra-rater repeats.** Silently append a small number (config
    `N_REPEATS`, default 4) of the 60 images a second time, at random positions
@@ -113,9 +114,11 @@ internal.
 
 ### Results sheet (Google Sheet, one row appended per rating)
 Columns: `timestamp_iso`, `curator_id`, `image_id`, `repeat_index`, `score`
-(float 0–1, blank only if the slider was never touched), `unsure` (bool,
-independent of score), `dwell_seconds` (time image was on screen),
-`slider_touched` (bool), `queue_position`, `app_version`.
+(float 0–1, always present for rows written by the current app), `unsure`
+(bool, low-confidence flag on the score), `dwell_seconds` (time image was on
+screen), `slider_touched` (bool), `queue_position`, `app_version`.
+Rows written before this change may have a blank score where the curator
+skipped via Unsure; analysis treats those as unscored.
 
 ## Screens / flow
 
@@ -124,8 +127,9 @@ every screen, independent of the stage flow below.
 
 1. **Consent + instructions.** Brief task explanation ("estimate how marble vs
    Atlantic this trout looks: 0 = pure Atlantic fario, 1 = pure marble
-   marmorata; use the whole scale"), note that responses are recorded, and an
-   "I agree, begin" button. Include any reference/calibration images if provided
+   marmorata; use the whole scale; answer every photo even if it's a guess,
+   and use "Low confidence" to flag uncertainty, not to skip"), note that
+   responses are recorded, and an "I agree, begin" button. Include any reference/calibration images if provided
    later (leave a clearly marked spot).
 2. **Curator identification.** Two paths: (a) new here, get a system-assigned
    id (read-only, copyable, rerollable), press Start; (b) already started,
@@ -136,8 +140,8 @@ every screen, independent of the stage flow below.
      total`). Deliberately no time estimate, that adds pressure.
    - The image, large, centered, `use_container_width=True`, served from bytes.
    - Slider 0.00–1.00 step 0.01, NO 0.5 default.
-   - "Unsure / can't tell" checkbox.
-   - "Next" disabled until slider touched or Unsure checked.
+   - "Low confidence" checkbox (flags the score, does not skip).
+   - "Next" disabled until the slider holds a real value.
    - On Next: append row to sheet immediately, record dwell time, advance,
      `st.rerun()`.
 4. **Completion screen.** Thank-you; make clear they can close the tab.

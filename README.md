@@ -100,7 +100,13 @@ Once curators have rated some images:
 
 ```bash
 uv run python scripts/analyze.py --out report.txt
+# sensitivity check: drop ratings the curator flagged as low confidence
+uv run python scripts/analyze.py --exclude-low-confidence
 ```
+
+Every photo carries a score; the "Low confidence" flag is kept by default,
+and `--exclude-low-confidence` drops those ratings to check whether results
+hold without them.
 
 This pulls the live Sheet and reports:
 - **Inter-rater reliability** across the 60 images: ICC(2,1) and

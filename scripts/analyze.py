@@ -8,8 +8,12 @@ all-overlap design:
   3. Intra-rater consistency from the hidden repeated images (repeat_index
      0 vs 1): mean absolute difference and correlation per curator.
 
+Every rating carries a score; the `unsure` flag marks low confidence in it.
+Low-confidence rows are included by default. Pass --exclude-low-confidence
+for a sensitivity check that drops them.
+
 Usage:
-    python scripts/analyze.py [--out report.txt]
+    python scripts/analyze.py [--out report.txt] [--exclude-low-confidence]
 
 Reads credentials the same way the app does, but from a local
 .streamlit/secrets.toml (no Streamlit runtime required for this script).
@@ -59,6 +63,14 @@ def fetch_results() -> pd.DataFrame:
     df["score"] = pd.to_numeric(df["score"], errors="coerce")  # blank -> NaN
     df["unsure"] = df["unsure"].astype(str).str.lower().isin(["true", "1", "yes"])
     return df
+
+
+def scored_rows(df: pd.DataFrame, exclude_low_confidence: bool) -> pd.DataFrame:
+    """Rows that carry a score, optionally without low-confidence ones."""
+    rows = df[df["score"].notna()]
+    if exclude_low_confidence:
+        rows = rows[~rows["unsure"]]
+    return rows
 
 
 # ------------------------------------------------------------ reliability --
@@ -125,10 +137,10 @@ def krippendorff_alpha_interval(units: dict[str, list[float]]) -> float:
     return 1 - do / de
 
 
-def analyze_reliability(df: pd.DataFrame) -> str:
+def analyze_reliability(df: pd.DataFrame, exclude_low_confidence: bool) -> str:
     lines = ["## Inter-rater reliability (across all 60 images, first rating only)\n"]
 
-    main = df[(df["repeat_index"] == 0) & (~df["unsure"]) & df["score"].notna()]
+    main = scored_rows(df[df["repeat_index"] == 0], exclude_low_confidence)
     pivot = main.pivot_table(index="image_id", columns="curator_id", values="score")
 
     complete = pivot.dropna(axis=0, how="any")  # images every remaining curator rated
@@ -155,16 +167,18 @@ def analyze_reliability(df: pd.DataFrame) -> str:
     alpha = krippendorff_alpha_interval(units)
     lines.append(f"Krippendorff's alpha (interval, uses all available data): **{alpha:.3f}**")
 
-    n_unsure = df[(df["repeat_index"] == 0) & df["unsure"]].shape[0]
-    lines.append(f"\n'Unsure' responses (excluded above): {n_unsure}")
+    all_first = scored_rows(df[df["repeat_index"] == 0], exclude_low_confidence=False)
+    n_low_conf = int(all_first["unsure"].sum())
+    included = "excluded" if exclude_low_confidence else "included"
+    lines.append(f"\nLow-confidence ratings ({included} above): {n_low_conf}")
     return "\n".join(lines)
 
 
 # --------------------------------------------------------- per-curator bias
 
-def analyze_bias(df: pd.DataFrame) -> str:
+def analyze_bias(df: pd.DataFrame, exclude_low_confidence: bool) -> str:
     lines = ["\n## Per-curator bias / scale vs cross-curator consensus\n"]
-    main = df[(df["repeat_index"] == 0) & (~df["unsure"]) & df["score"].notna()]
+    main = scored_rows(df[df["repeat_index"] == 0], exclude_low_confidence)
     pivot = main.pivot_table(index="image_id", columns="curator_id", values="score")
 
     rows = []
@@ -197,10 +211,10 @@ def analyze_bias(df: pd.DataFrame) -> str:
 
 # ------------------------------------------------------- intra-rater repeats
 
-def analyze_repeats(df: pd.DataFrame) -> str:
+def analyze_repeats(df: pd.DataFrame, exclude_low_confidence: bool) -> str:
     lines = ["\n## Intra-rater consistency (hidden repeated images)\n"]
 
-    scored = df[(~df["unsure"]) & df["score"].notna()]
+    scored = scored_rows(df, exclude_low_confidence)
     first = scored[scored["repeat_index"] == 0][["curator_id", "image_id", "score"]]
     second = scored[scored["repeat_index"] == 1][["curator_id", "image_id", "score"]]
     paired = first.merge(second, on=["curator_id", "image_id"], suffixes=("_1", "_2"))
@@ -230,7 +244,13 @@ def analyze_repeats(df: pd.DataFrame) -> str:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, default=None, help="write report to this file too")
+    parser.add_argument(
+        "--exclude-low-confidence",
+        action="store_true",
+        help="drop ratings flagged as low confidence (sensitivity check)",
+    )
     args = parser.parse_args()
+    excl = args.exclude_low_confidence
 
     df = fetch_results()
 
@@ -238,9 +258,9 @@ def main():
         [
             "# marbleness, results analysis",
             f"\nTotal rows in sheet: {len(df)}\n",
-            analyze_reliability(df),
-            analyze_bias(df),
-            analyze_repeats(df),
+            analyze_reliability(df, excl),
+            analyze_bias(df, excl),
+            analyze_repeats(df, excl),
         ]
     )
 
